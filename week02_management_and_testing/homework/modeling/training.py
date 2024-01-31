@@ -16,7 +16,7 @@ def train_step(model: DiffusionModel, inputs: torch.Tensor, optimizer: Optimizer
     return loss
 
 
-def train_epoch(model: DiffusionModel, dataloader: DataLoader, optimizer: Optimizer, device: str):
+def train_epoch(model: DiffusionModel, dataloader: DataLoader, optimizer: Optimizer, device: str) -> float:
     model.train()
     pbar = tqdm(dataloader)
     loss_ema = None
@@ -24,6 +24,8 @@ def train_epoch(model: DiffusionModel, dataloader: DataLoader, optimizer: Optimi
         train_loss = train_step(model, x, optimizer, device)
         loss_ema = train_loss if loss_ema is None else 0.9 * loss_ema + 0.1 * train_loss
         pbar.set_description(f"loss: {loss_ema:.4f}")
+
+    return loss_ema
 
 
 def generate_samples(model: DiffusionModel, device: str, path: str):
