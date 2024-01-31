@@ -11,7 +11,7 @@ from modeling.unet import UnetModel
 
 @pytest.fixture
 def train_dataset():
-    transforms = Compose([ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    transforms = Compose([ToTensor(), Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
     dataset = CIFAR10(
         "./data",
         train=True,
@@ -32,7 +32,7 @@ def test_train_on_one_batch(device, train_dataset):
     ddpm.to(device)
 
     optim = torch.optim.Adam(ddpm.parameters(), lr=5e-4)
-    dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+    dataloader = DataLoader(train_dataset, batch_size=4, shuffle=False)
 
     x, _ = next(iter(dataloader))
     loss = None

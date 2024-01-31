@@ -17,7 +17,7 @@ def main(device: str, num_epochs: int = 100):
     ddpm.to(device)
 
     train_transforms = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        [transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))]
     )
 
     dataset = CIFAR10(

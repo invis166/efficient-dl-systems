@@ -10,9 +10,11 @@ class DiffusionModel(nn.Module):
         eps_model: nn.Module,
         betas: Tuple[float, float],
         num_timesteps: int,
+        device: str = 'cpu',
     ):
         super().__init__()
         self.eps_model = eps_model
+        self.device = device
 
         for name, schedule in get_schedules(betas[0], betas[1], num_timesteps).items():
             self.register_buffer(name, schedule)
@@ -21,22 +23,22 @@ class DiffusionModel(nn.Module):
         self.criterion = nn.MSELoss()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        timestep = torch.randint(1, self.num_timesteps + 1, (x.shape[0],))
-        eps = torch.rand_like(x)
+        timestep = torch.randint(1, self.num_timesteps + 1, (x.shape[0],)).to(self.device)
+        eps = torch.randn_like(x).to(self.device)
 
         x_t = (
             self.sqrt_alphas_cumprod[timestep, None, None, None] * x
-            + self.one_minus_alpha_over_prod[timestep, None, None, None] * eps
+            + self.sqrt_one_minus_alpha_prod[timestep, None, None, None] * eps
         )
 
         return self.criterion(eps, self.eps_model(x_t, timestep / self.num_timesteps))
 
     def sample(self, num_samples: int, size, device) -> torch.Tensor:
 
-        x_i = torch.randn(num_samples, *size)
+        x_i = torch.randn(num_samples, *size).to(device)
 
         for i in range(self.num_timesteps, 0, -1):
-            z = torch.randn(num_samples, *size) if i > 1 else 0
+            z = torch.randn(num_samples, *size).to(device) if i > 1 else 0
             eps = self.eps_model(x_i, torch.tensor(i / self.num_timesteps).repeat(num_samples, 1).to(device))
             x_i = self.inv_sqrt_alphas[i] * (x_i - eps * self.one_minus_alpha_over_prod[i]) + self.sqrt_betas[i] * z
 
