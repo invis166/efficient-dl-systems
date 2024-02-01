@@ -1,0 +1,8 @@
+Modelling:
+1. fixed noise sampling distribution in forward pass from uniform to normal 
+2. fixed formula in forward pass (one_minus_alpha_over_prod -> sqrt_one_minus_alpha_prod)
+3. fixed time embedding size in unet
+
+Tests:
+1. fixed normalization 
+2. fixed seed
