@@ -60,6 +60,7 @@ def test_training(
     num_epochs,
     hidden_size,
     expected_loss,
+    train_dataset,
     set_seed,
     tmp_path
 ):
@@ -72,18 +73,7 @@ def test_training(
     )
     ddpm.to(device)
 
-    train_transforms = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))]
-    )
-
-    dataset = CIFAR10(
-        "cifar10",
-        train=True,
-        download=True,
-        transform=train_transforms,
-    )
-
-    dataloader = DataLoader(dataset, batch_size=128, num_workers=4, shuffle=True)
+    dataloader = DataLoader(train_dataset, batch_size=128, num_workers=4, shuffle=True)
     optim = torch.optim.Adam(ddpm.parameters(), lr=1e-5)
 
     loss = None
