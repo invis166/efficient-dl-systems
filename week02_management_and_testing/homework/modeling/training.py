@@ -1,3 +1,4 @@
+from pathlib import Path
 import torch
 from torch.optim.optimizer import Optimizer
 from torch.utils.data import DataLoader
@@ -28,9 +29,14 @@ def train_epoch(model: DiffusionModel, dataloader: DataLoader, optimizer: Optimi
     return loss_ema
 
 
-def generate_samples(model: DiffusionModel, device: str, path: str):
+def generate_samples(model: DiffusionModel, device: str, path: str, transforms=None, num_samples=8):
+    Path(path).parent.mkdir(exist_ok=True)
     model.eval()
     with torch.no_grad():
-        samples = model.sample(8, (3, 32, 32), device=device)
-        grid = make_grid(samples, nrow=4)
+        samples = model.sample(num_samples, (3, 32, 32), device=device)
+        if transforms:
+            samples = transforms(samples)
+        grid = make_grid(samples, nrow=num_samples // 2)
         save_image(grid, path)
+    
+    return samples, grid
