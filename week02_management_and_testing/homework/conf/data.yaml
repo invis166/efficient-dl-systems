@@ -1,0 +1,3 @@
+data:
+  augmentations: False
+  num_workers: 4

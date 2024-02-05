@@ -1,0 +1,4 @@
+training:
+  batch_size: 256
+  num_epochs: 10
+  device: cuda

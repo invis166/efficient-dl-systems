@@ -1,0 +1,5 @@
+defaults:
+  - optimizer: adam
+  - model
+  - data
+  - training
