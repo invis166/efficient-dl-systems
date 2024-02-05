@@ -13,5 +13,11 @@ stages:
     - modeling/diffusion.py
     - modeling/training.py
     - modeling/unet.py
+    - conf/config.yaml
+    - conf/model.yaml
+    - conf/training.yaml
+    - conf/data.yaml
+    - conf/optimizer/adam.yaml
+    - conf/optimizer/sgd.yaml
     outs:
     - ${training.output_file}
