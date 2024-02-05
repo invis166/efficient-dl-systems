@@ -1,0 +1,17 @@
+stages:
+  prepare_data:
+    cmd: python prepare_data.py ${data.output_folder}
+    deps:
+    - prepare_data.py
+    outs:
+    - ${data.output_folder}
+  train:
+    cmd: python main.py
+    deps:
+    - ${data.output_folder}
+    - main.py
+    - modeling/diffusion.py
+    - modeling/training.py
+    - modeling/unet.py
+    outs:
+    - model.pt

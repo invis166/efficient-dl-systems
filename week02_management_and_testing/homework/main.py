@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union
 
 import hydra
 import wandb
@@ -8,15 +9,15 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10
 from torchvision.utils import make_grid, save_image
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from modeling.diffusion import DiffusionModel
 from modeling.training import generate_samples, train_epoch
 from modeling.unet import UnetModel
 
 
-@hydra.main(version_base=None, config_path="conf/", config_name="config")
-def main(cfg: DictConfig):
+def main():
+    cfg = OmegaConf.load("params.yaml")
     print(cfg)
     wandb.init(config=dict(cfg), project='effdl_example', name='baseline-hydra')
 
@@ -27,7 +28,7 @@ def main(cfg: DictConfig):
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261)),
     ]
-    if cfg.data.augmentations:
+    if cfg.training.augmentations:
         train_transforms_list.append(transforms.RandomHorizontalFlip(p=0.5))
     train_transforms = transforms.Compose(train_transforms_list)
 
@@ -36,9 +37,9 @@ def main(cfg: DictConfig):
     )
 
     dataset = CIFAR10(
-        "cifar10",
+        cfg.data.output_folder,
         train=True,
-        download=True,
+        download=False,
         transform=train_transforms,
     )
     _log_samples_from_dataset(dataset, inverse_norm_transform)
@@ -68,7 +69,7 @@ def _log_samples_from_dataset(dataset, inverse_norm, n_samples=8):
     _log_artifact_to_wandb('sample_from_dataset', samples_grid_path)
 
 
-def _log_artifact_to_wandb(artifact_name: str, artifact_path: Path | str, artifact_type: str = 'dataset'):
+def _log_artifact_to_wandb(artifact_name: str, artifact_path: Union[Path, str], artifact_type: str = 'dataset'):
     artifact_path = Path(artifact_path)
     if artifact_path.is_dir():
         wandb.log_artifact(artifact_path, artifact_name, artifact_type)
