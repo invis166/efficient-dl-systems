@@ -3,3 +3,4 @@ training:
   num_epochs: 10
   device: cuda
   augmentations: False
+  output_file: model.pt

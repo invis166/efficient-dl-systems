@@ -14,4 +14,4 @@ stages:
     - modeling/training.py
     - modeling/unet.py
     outs:
-    - model.pt
+    - ${training.output_file}
