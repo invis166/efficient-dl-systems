@@ -1,0 +1,68 @@
+schema: '2.0'
+stages:
+  prepare_data:
+    cmd: python prepare_data.py cifar10
+    deps:
+    - path: prepare_data.py
+      hash: md5
+      md5: 4407009e8c5f1cd81530257474704e07
+      size: 149
+    outs:
+    - path: cifar10
+      hash: md5
+      md5: e252d2c8ba36d1ab3e21a873ab62daa3.dir
+      size: 356712185
+      nfiles: 9
+  train:
+    cmd: python main.py
+    deps:
+    - path: cifar10
+      hash: md5
+      md5: e252d2c8ba36d1ab3e21a873ab62daa3.dir
+      size: 356712185
+      nfiles: 9
+    - path: conf/config.yaml
+      hash: md5
+      md5: 5a7197b4b334bbff50ddba645d7f841e
+      size: 61
+    - path: conf/data.yaml
+      hash: md5
+      md5: 67b056207567a652f6226df258b5f719
+      size: 47
+    - path: conf/model.yaml
+      hash: md5
+      md5: 9316d39c47195a8bbbe3c757377aed7e
+      size: 104
+    - path: conf/optimizer/adam.yaml
+      hash: md5
+      md5: ec99788608ef5596ccba05b345919389
+      size: 25
+    - path: conf/optimizer/sgd.yaml
+      hash: md5
+      md5: b8e5b8800aad4bdd8fe7445add37e49f
+      size: 43
+    - path: conf/training.yaml
+      hash: md5
+      md5: 609092995f77681df06f1af640ceefc8
+      size: 105
+    - path: main.py
+      hash: md5
+      md5: a6d29fa71fd20d685dfee8b08ed7a69d
+      size: 3679
+    - path: modeling/diffusion.py
+      hash: md5
+      md5: 1884e82c3fbf690388118ae78bda78a0
+      size: 2505
+    - path: modeling/training.py
+      hash: md5
+      md5: 748030ce045950e30807f232ec061142
+      size: 1347
+    - path: modeling/unet.py
+      hash: md5
+      md5: 41dfe435628926dd1e072474130645c6
+      size: 3653
+    outs:
+    - path: model.pt
+      hash: md5
+      md5: 88adaa44f3acc999e7aef22bb0693cbe
+      size: 294258
