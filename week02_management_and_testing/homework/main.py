@@ -57,6 +57,8 @@ def main():
 
         wandb.log({'loss': loss})
 
+    torch.save(ddpm.state_dict, cfg.training.output_file)
+
 
 def _log_samples_from_dataset(dataset, inverse_norm, n_samples=8):
     samples = [inverse_norm(dataset[i][0]) for i in range(n_samples)]

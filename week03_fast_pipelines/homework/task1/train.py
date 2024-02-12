@@ -10,8 +10,8 @@ from dataset import get_train_data
 def train_epoch(
     train_loader: torch.utils.data.DataLoader,
     model: torch.nn.Module,
-    criterion: torch.nn.modules.loss._Loss,
-    optimizer: torch.optim.Optimizer,
+    criterion,
+    optimizer,
     device: torch.device,
 ) -> None:
     model.train()
@@ -42,3 +42,7 @@ def train():
     num_epochs = 5
     for epoch in range(0, num_epochs):
         train_epoch(train_loader, model, criterion, optimizer, device=device)
+
+
+if __name__ == '__main__':
+    train()
