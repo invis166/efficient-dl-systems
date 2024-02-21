@@ -8,6 +8,8 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from torch import nn
 
+from torch.profiler import record_function
+
 
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
@@ -26,7 +28,8 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
-        return self.net(x)
+        with record_function('feedforward'):
+            return self.net(x)
 
 
 class Attention(nn.Module):
@@ -41,25 +44,22 @@ class Attention(nn.Module):
         self.attend = nn.Softmax(dim=-1)
         self.dropout = nn.Dropout(dropout)
         self.norm = nn.LayerNorm(dim)
-        self.queries = nn.Linear(dim, inner_dim, bias=False)
-        self.keys = nn.Linear(dim, inner_dim, bias=False)
-        self.values = nn.Linear(dim, inner_dim, bias=False)
+        self.qkv = nn.Linear(dim, inner_dim * 3, bias=False)
 
         self.to_out = nn.Sequential(nn.Linear(inner_dim, dim), nn.Dropout(dropout)) if project_out else nn.Identity()
 
     def forward(self, x):
-        q = self.queries(x)
-        k = self.keys(x)
-        v = self.values(x)
+        with record_function('self_attn'):
+            q, k, v = self.qkv(x).chunk(3, dim=-1)
 
-        dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
+            dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
-        attn = self.attend(dots)
-        attn = self.dropout(attn)
+            attn = self.attend(dots)
+            attn = self.dropout(attn)
 
-        out = torch.matmul(attn, v)
+            out = torch.matmul(attn, v)
 
-        return self.to_out(out)
+            return self.to_out(out)
 
 
 class Transformer(nn.Module):
@@ -112,7 +112,7 @@ class ViT(nn.Module):
         assert pool in {"cls", "mean"}, "pool type must be either cls (cls token) or mean (mean pooling)"
 
         self.to_patch_embedding = nn.Sequential(
-            Rearrange("b c (h p1) (w p2) -> b (h w) (p1 p2 c)", p1=patch_height, p2=patch_width),
+            Rearrange("b c (h p1) (w p2) -> b (h w) (p1 p2 c)", p1=patch_height, p2=patch_width),  # maybe move to preprocessing
             nn.Linear(patch_dim, dim),
         )
 
@@ -128,20 +128,23 @@ class ViT(nn.Module):
         self.mlp_head = nn.Sequential(nn.BatchNorm1d(dim), nn.Linear(dim, num_classes))
 
     def forward(self, img):
-        x = self.to_patch_embedding(img)
-        b, n, _ = x.shape
+        with record_function('vit'):
+            with record_function('path_embedding'):
+                x = self.to_patch_embedding(img)
+            b, n, _ = x.shape
 
-        cls_tokens = repeat(self.cls_token, "1 1 d -> b 1 d", b=b)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x += self.pos_embedding[:, : (n + 1)]
+            with record_function('cls_token'):
+                cls_tokens = repeat(self.cls_token, "1 1 d -> b 1 d", b=b)
+                x = torch.cat((cls_tokens, x), dim=1)
+            x += self.pos_embedding[:, : (n + 1)]
 
-        x = self.dropout(x)
+            x = self.dropout(x)
 
-        x = self.transformer(x)
+            x = self.transformer(x)
 
-        x = x.mean(dim=1) if self.pool == "mean" else x[:, 0]
+            x = x.mean(dim=1) if self.pool == "mean" else x[:, 0]
 
-        x = self.to_latent(x)
+            x = self.to_latent(x)
 
-        output = self.mlp_head(x)
-        return output
+            output = self.mlp_head(x)
+            return output
