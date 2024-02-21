@@ -71,7 +71,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-class TransformerEncoderLayer(nn.Module):
+class TransformerEncoderLayer_(nn.Module):
     r"""TransformerEncoderLayer is made up of self-attn and feedforward network.
     This standard encoder layer is based on the paper "Attention Is All You Need".
     Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,

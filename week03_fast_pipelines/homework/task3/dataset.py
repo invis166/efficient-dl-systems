@@ -9,6 +9,8 @@ from torchvision import transforms
 
 from utils import Clothes, get_labels_dict
 
+from torch.profiler import record_function
+
 
 class ClothesDataset(Dataset):
     def __init__(self, folder_path, frame, transform=None):
@@ -24,11 +26,15 @@ class ClothesDataset(Dataset):
 
     def __getitem__(self, idx):
         img_name = self.img_list[idx]
-        img = Image.open(f"{self.folder_path}/{img_name}.jpg").convert("RGB")
-        img_transformed = self.transform(img)
-        label = self.label2ix[self.frame.loc[img_name]["label"]]
+        # TODO: read and process all images in the init
+        with record_function('ClothesDataset_getitem'):
+            with record_function('dataset_read_image'):
+                img = Image.open(f"{self.folder_path}/{img_name}.jpg").convert("RGB")
+            with record_function('dataset_transform'):
+                img_transformed = self.transform(img)
+            label = self.label2ix[self.frame.loc[img_name]["label"]]
 
-        return img_transformed, label
+            return img_transformed, label
 
 
 def download_extract_dataset():
