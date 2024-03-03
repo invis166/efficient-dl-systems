@@ -18,8 +18,12 @@ def run_sequential(rank, size, num_iter=10):
     Process 2
     ```
     """
-
-    pass
+    for _ in range(num_iter):
+        for _ in range(rank):
+            dist.barrier()
+        print(rank)
+        for _ in range(size - rank):
+            dist.barrier()
 
 
 if __name__ == "__main__":
