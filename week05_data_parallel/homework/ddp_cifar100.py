@@ -12,6 +12,10 @@ from torchvision.datasets import CIFAR100
 torch.set_num_threads(1)
 
 
+NUM_EPOCHS = 10
+NUM_GRAD_ACCUM_STEPS = 3
+
+
 def init_process(local_rank, fn, backend="nccl"):
     """Initialize the distributed environment."""
     dist.init_process_group(backend, rank=local_rank)
@@ -75,34 +79,36 @@ def run_training(rank, size):
         download=True,
     )
     # where's the validation dataset?
-    loader = DataLoader(dataset, sampler=DistributedSampler(dataset, size, rank), batch_size=64)
+    loader = DataLoader(dataset, sampler=DistributedSampler(dataset, size, rank), batch_size=64, pin_memory=True, num_workers=4)
 
     model = Net()
-    device = torch.device("cpu")  # replace with "cuda" afterwards
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
 
     num_batches = len(loader)
 
-    for _ in range(10):
+    for epoch in range(NUM_EPOCHS):
         epoch_loss = torch.zeros((1,), device=device)
 
         for data, target in loader:
             data = data.to(device)
             target = target.to(device)
 
-            optimizer.zero_grad()
             output = model(data)
             loss = torch.nn.functional.cross_entropy(output, target)
             epoch_loss += loss.detach()
             loss.backward()
-            average_gradients(model)
-            optimizer.step()
+            if (epoch + 1) % NUM_GRAD_ACCUM_STEPS == 0:
+                average_gradients(model)
+                optimizer.step()
+                optimizer.zero_grad()
 
-            acc = (output.argmax(dim=1) == target).float().mean()
+                acc = (output.argmax(dim=1) == target).float().mean()
+                print(f"Rank {dist.get_rank()}, loss: {epoch_loss / num_batches}, acc: {acc}")
 
-            print(f"Rank {dist.get_rank()}, loss: {epoch_loss / num_batches}, acc: {acc}")
-            epoch_loss = 0
+                epoch_loss = 0
+
         # where's the validation loop?
 
 
