@@ -24,7 +24,6 @@ def _compute_loss(outputs, global_batch_size, local_rank=None):
     return outputs[:global_center_idx % local_batch_size + 1].sum()
 
 
-
 def init_sbn_process(world_size, local_rank, inputs):
     os.environ['WORLD_SIZE'] = str(world_size)
     os.environ['MASTER_ADDR'] = 'localhost'
