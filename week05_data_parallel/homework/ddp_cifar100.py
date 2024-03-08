@@ -76,32 +76,12 @@ def average_gradients(model):
         param.grad.data /= size
 
 
-def run_training(rank, size, num_epochs, grad_accum_steps, distributed_impl):
-    torch.manual_seed(0)
-
-    dataset = CIFAR100(
-        "./cifar",
-        transform=transforms.Compose(
-            [
-                transforms.ToTensor(),
-                transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
-            ]
-        ),
-        download=True,
-    )
-    # where's the validation dataset?
-    loader = DataLoader(dataset, sampler=DistributedSampler(dataset, size, rank), batch_size=256, pin_memory=True, num_workers=4)
-
-    model = Net(distributed_impl)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model.to(device)
-    if distributed_impl == 'pytorch':
-        model = DistributedDataParallel(model, device_ids=[rank])
-
+def _train_model(model: nn.Module, loader, device, grad_accum_steps, distributed_impl, rank, num_epochs):
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
 
     num_batches = len(loader)
 
+    model.train()
     for epoch in range(num_epochs):
         epoch_loss = torch.zeros((1,), device=device)
         for step, (data, target) in enumerate(loader):
@@ -121,7 +101,74 @@ def run_training(rank, size, num_epochs, grad_accum_steps, distributed_impl):
                 acc = (output.argmax(dim=1) == target).float().mean()
                 print(f"loss: {epoch_loss / num_batches}, acc: {acc}")
 
-        # where's the validation loop?
+
+def _eval_model(model: nn.Module, val_loader, device, rank):
+    # torch.utils.data.DistributedSampler already restricts the val data
+    # to a specific subset based on the process rank, so there is no need in torch.distributed.scatter
+    model.eval()
+    correct = torch.tensor(0, device=device)
+    for data, target in val_loader:
+        data = data.to(device)
+        target = target.to(device)
+        pred = model(data)
+        correct += (target == pred.argmax(1)).sum()
+
+    dist.all_reduce(correct, dist.ReduceOp.SUM)
+
+    return correct
+
+
+def run_training(rank, size, num_epochs, grad_accum_steps, distributed_impl):
+    torch.manual_seed(0)
+
+    train_dataset = CIFAR100(
+        "./cifar",
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+            ]
+        ),
+        download=True,
+        train=True,
+    )
+    val_dataset = CIFAR100(
+        "./cifar",
+        transform=transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize((0.5071, 0.4867, 0.4408), (0.2675, 0.2565, 0.2761)),
+            ]
+        ),
+        download=True,
+        train=False,
+    )
+    train_loader = DataLoader(
+        train_dataset,
+        sampler=DistributedSampler(train_dataset, size, rank),
+        batch_size=256,
+        pin_memory=True,
+        num_workers=4,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        sampler=DistributedSampler(val_dataset, size, rank),
+        batch_size=256,
+        pin_memory=True,
+        num_workers=4,
+        drop_last=True,
+    )
+
+    model = Net(distributed_impl)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model.to(device)
+    if distributed_impl == 'pytorch':
+        model = DistributedDataParallel(model, device_ids=[rank])
+
+    _train_model(model, train_loader, device, grad_accum_steps, distributed_impl, rank, num_epochs)
+    n_correct = _eval_model(model, val_loader, device, rank)
+    if rank == 0:
+        print(f'val acc: {n_correct / len(val_dataset)}')
 
 
 if __name__ == "__main__":
