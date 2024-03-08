@@ -1,3 +1,5 @@
+import time
+import argparse
 import os
 
 import torch
@@ -6,21 +8,27 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
+from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
 from torchvision.datasets import CIFAR100
+
+from syncbn import SyncBatchNorm
 
 torch.set_num_threads(1)
 
 
-NUM_EPOCHS = 10
-NUM_GRAD_ACCUM_STEPS = 3
+EVAL_RATE = 16
 
 
-def init_process(local_rank, fn, backend="nccl"):
+def init_process(local_rank, fn, backend="nccl", **kwargs):
     """Initialize the distributed environment."""
     dist.init_process_group(backend, rank=local_rank)
     size = dist.get_world_size()
-    fn(local_rank, size)
+    start_time = time.perf_counter()
+    fn(local_rank, size, **kwargs)
+    end_time = time.perf_counter()
+
+    print(f'rank {local_rank} | time: {end_time - start_time} | max memory allocated: {torch.cuda.max_memory_allocated()}')
 
 
 class Net(nn.Module):
@@ -29,7 +37,7 @@ class Net(nn.Module):
     Feel free to replace it with EffNetV2-XL once you get comfortable injecting SyncBN into models programmatically.
     """
 
-    def __init__(self):
+    def __init__(self, impl):
         super().__init__()
         self.conv1 = nn.Conv2d(3, 32, 3, 1)
         self.conv2 = nn.Conv2d(32, 32, 3, 1)
@@ -37,7 +45,10 @@ class Net(nn.Module):
         self.dropout2 = nn.Dropout(0.5)
         self.fc1 = nn.Linear(6272, 128)
         self.fc2 = nn.Linear(128, 100)
-        self.bn1 = nn.BatchNorm1d(128, affine=False)  # to be replaced with SyncBatchNorm
+        if impl == 'pytorch':
+            self.bn1 = nn.SyncBatchNorm(128, affine=False)
+        else:
+            self.bn1 = SyncBatchNorm(128)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -65,7 +76,7 @@ def average_gradients(model):
         param.grad.data /= size
 
 
-def run_training(rank, size):
+def run_training(rank, size, num_epochs, grad_accum_steps, distributed_impl):
     torch.manual_seed(0)
 
     dataset = CIFAR100(
@@ -79,19 +90,21 @@ def run_training(rank, size):
         download=True,
     )
     # where's the validation dataset?
-    loader = DataLoader(dataset, sampler=DistributedSampler(dataset, size, rank), batch_size=64, pin_memory=True, num_workers=4)
+    loader = DataLoader(dataset, sampler=DistributedSampler(dataset, size, rank), batch_size=256, pin_memory=True, num_workers=4)
 
-    model = Net()
+    model = Net(distributed_impl)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
+    if distributed_impl == 'pytorch':
+        model = DistributedDataParallel(model, device_ids=[rank])
+
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.5)
 
     num_batches = len(loader)
 
-    for epoch in range(NUM_EPOCHS):
+    for epoch in range(num_epochs):
         epoch_loss = torch.zeros((1,), device=device)
-
-        for data, target in loader:
+        for step, (data, target) in enumerate(loader):
             data = data.to(device)
             target = target.to(device)
 
@@ -99,19 +112,33 @@ def run_training(rank, size):
             loss = torch.nn.functional.cross_entropy(output, target)
             epoch_loss += loss.detach()
             loss.backward()
-            if (epoch + 1) % NUM_GRAD_ACCUM_STEPS == 0:
-                average_gradients(model)
+            if (step + 1) % grad_accum_steps == 0:
+                if distributed_impl == 'selfmade':
+                    average_gradients(model)
                 optimizer.step()
                 optimizer.zero_grad()
-
+            if step % EVAL_RATE == 0 and rank == 0:
                 acc = (output.argmax(dim=1) == target).float().mean()
-                print(f"Rank {dist.get_rank()}, loss: {epoch_loss / num_batches}, acc: {acc}")
-
-                epoch_loss = 0
+                print(f"loss: {epoch_loss / num_batches}, acc: {acc}")
 
         # where's the validation loop?
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--distributed-impl', choices=['pytorch', 'selfmade'])
+    parser.add_argument('--num-epochs', default=10)
+    parser.add_argument('--grad-accum-steps', default=3)
+
+    args = parser.parse_args()
+
     local_rank = int(os.environ["LOCAL_RANK"])
-    init_process(local_rank, fn=run_training, backend="gloo")  # replace with "nccl" when testing on several GPUs
+    torch.cuda.set_device(local_rank)
+    init_process(
+        local_rank,
+        fn=run_training,
+        backend="nccl",
+        num_epochs=int(args.num_epochs),
+        grad_accum_steps=int(args.grad_accum_steps),
+        distributed_impl=args.distributed_impl,
+    )
