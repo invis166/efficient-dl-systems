@@ -81,8 +81,8 @@ class SyncBatchNorm(_BatchNorm):
             dtype=None,
         )
         # your code here
-        self.running_mean = torch.zeros((num_features,))
-        self.running_std = torch.ones((num_features,))
+        # self.running_mean = torch.zeros((num_features,))
+        # self.running_std = torch.ones((num_features,))
 
         self._world_size = dist.get_world_size()
         self._bn = sync_batch_norm.apply
@@ -90,9 +90,9 @@ class SyncBatchNorm(_BatchNorm):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         # You will probably need to use `sync_batch_norm` from above
         normalized, running_mean_new, running_std_new = self._bn(
-            input, self.running_mean, self.running_std, self.eps, self.momentum, self._world_size
+            input, self.running_mean, self.running_var, self.eps, self.momentum, self._world_size
         )
-        self.running_mean = running_mean_new
-        self.running_std = running_std_new
+        self.running_mean.copy_(running_mean_new.detach())
+        self.running_var.copy_(running_std_new.detach())
 
         return normalized
